@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Gesture Drawing</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            max-width: 1400px;
+            width: 100%;
+        }
+
+        .camera-section, .canvas-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+
+        #videoFeed {
+            width: 100%;
+            height: 400px;
+            background: #000;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 18px;
+        }
+
+        #drawingCanvas {
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            cursor: crosshair;
+            display: block;
+            margin-bottom: 15px;
+            background: white;
+            width: 100%;
+        }
+
+        .gesture-display {
+            background: #f0f0f0;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            color: #667eea;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .color-btn {
+            padding: 12px;
+            border: 3px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .color-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .color-btn.active {
+            border-color: #000;
+            transform: scale(1.1);
+        }
+
+        .black-btn { background: #000; color: white; }
+        .red-btn { background: #FF6B6B; color: white; }
+        .green-btn { background: #51CF66; color: white; }
+        .blue-btn { background: #4D96FF; color: white; }
+        .yellow-btn { background: #FFD93D; color: #333; }
+        .magenta-btn { background: #E91E8C; color: white; }
+
+        .size-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .size-control label {
+            font-weight: bold;
+            color: #333;
+            min-width: 80px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+        }
+
+        .size-display {
+            background: #667eea;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            min-width: 30px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .undo-btn {
+            background: #FFB347;
+            color: white;
+        }
+
+        .undo-btn:hover {
+            background: #FFA500;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 165, 0, 0.3);
+        }
+
+        .clear-btn {
+            background: #FF6B6B;
+            color: white;
+        }
+
+        .clear-btn:hover {
+            background: #EE5A52;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .info-box {
+            background: #E8F4F8;
+            border-left: 4px solid #667eea;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .gesture-guide {
+            font-size: 12px;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            color: #666;
+        }
+
+        .gesture-guide p {
+            margin: 5px 0;
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .status {
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .status.connected {
+            color: #51CF66;
+        }
+
+        .status.disconnected {
+            color: #FF6B6B;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Camera Section -->
+        <div class="camera-section">
+            <h2>📹 Hand Tracking</h2>
+            <div id="videoFeed">Loading camera...</div>
+            <div class="gesture-display">
+                Gesture: <span id="gestureText">None</span>
+            </div>
+            <div class="info-box">
+                <strong>✋ Hand Gestures:</strong>
+                <div class="gesture-guide">
+                    <p>✌️ <strong>Peace Sign</strong> → Change Color</p>
+                    <p>👍 <strong>Thumbs Up</strong> → Increase Size</p>
+                    <p>👎 <strong>Thumbs Down</strong> → Decrease Size</p>
+                    <p>✋ <strong>Open Palm</strong> → Clear Canvas</p>
+                    <p>☝️ <strong>Pointing</strong> → Draw Mode</p>
+                </div>
+            </div>
+            <div class="status disconnected" id="status">🔴 Disconnected</div>
+        </div>
+
+        <!-- Canvas Section -->
+        <div class="canvas-section">
+            <h2>🎨 Drawing Canvas</h2>
+            <canvas id="drawingCanvas" width="400" height="400"></canvas>
+
+            <!-- Color Selection -->
+            <div class="color-grid">
+                <button class="color-btn black-btn active" data-color="0,0,0">⬛ Black</button>
+                <button class="color-btn red-btn" data-color="255,107,107">🔴 Red</button>
+                <button class="color-btn green-btn" data-color="81,207,102">🟢 Green</button>
+                <button class="color-btn blue-btn" data-color="77,150,255">🔵 Blue</button>
+                <button class="color-btn yellow-btn" data-color="255,217,61">🟡 Yellow</button>
+                <button class="color-btn magenta-btn" data-color="233,30,140">🟣 Magenta</button>
+            </div>
+
+            <!-- Brush Size -->
+            <div class="size-control">
+                <label for="brushSize">Brush Size:</label>
+                <input type="range" id="brushSize" min="1" max="30" value="5">
+                <span class="size-display" id="sizeDisplay">5</span>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button class="undo-btn" id="undoBtn">↶ Undo</button>
+                <button class="clear-btn" id="clearBtn">🗑️ Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const videoFeed = document.getElementById('videoFeed');
+        const gestureText = document.getElementById('gestureText');
+        const brushSize = document.getElementById('brushSize');
+        const sizeDisplay = document.getElementById('sizeDisplay');
+        const undoBtn = document.getElementById('undoBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const statusDisplay = document.getElementById('status');
+
+        let currentColor = 'rgb(0, 0, 0)';
+        let isDrawing = false;
+        let drawingHistory = [];
+        let lastPos = null;
+
+        // Resize canvas to match container
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width - 40;
+            canvas.height = Math.min(canvas.width, 500);
+            redrawCanvas();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Color button handlers
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const colorStr = this.dataset.color;
+                currentColor = `rgb(${colorStr})`;
+            });
+        });
+
+        // Brush size handler
+        brushSize.addEventListener('input', function() {
+            sizeDisplay.textContent = this.value;
+        });
+
+        // Undo handler
+        undoBtn.addEventListener('click', function() {
+            if (drawingHistory.length > 0) {
+                drawingHistory.pop();
+                redrawCanvas();
+            }
+        });
+
+        // Clear handler
+        clearBtn.addEventListener('click', function() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawingHistory = [];
+            lastPos = null;
+        });
+
+        // WebSocket handlers
+        socket.on('connect', function() {
+            statusDisplay.textContent = '🟢 Connected';
+            statusDisplay.classList.remove('disconnected');
+            statusDisplay.classList.add('connected');
+            socket.emit('start_camera');
+        });
+
+        socket.on('disconnect', function() {
+            statusDisplay.textContent = '🔴 Disconnected';
+            statusDisplay.classList.remove('connected');
+            statusDisplay.classList.add('disconnected');
+        });
+
+        socket.on('video_frame', function(data) {
+            // Display frame
+            const img = new Image();
+            img.src = 'data:image/jpeg;base64,' + data.frame;
+            img.onload = function() {
+                videoFeed.innerHTML = '';
+                const canvas_temp = document.createElement('canvas');
+                canvas_temp.width = img.width;
+                canvas_temp.height = img.height;
+                const context = canvas_temp.getContext('2d');
+                context.drawImage(img, 0, 0);
+                videoFeed.appendChild(canvas_temp);
+            };
+
+            // Update gesture
+            if (data.gesture) {
+                gestureText.textContent = data.gesture.toUpperCase();
+                handleGesture(data.gesture);
+            } else {
+                gestureText.textContent = 'None';
+            }
+
+            // Draw on canvas if pointing
+            if (data.index_pos && gestureText.textContent === 'POINTING') {
+                const x = (data.index_pos.x / 640) * canvas.width;
+                const y = (data.index_pos.y / 480) * canvas.height;
+                drawPoint(x, y);
+            }
+        });
+
+        function handleGesture(gesture) {
+            switch(gesture) {
+                case 'peace':
+                    cycleColor();
+                    break;
+                case 'thumbs_up':
+                    increaseBrushSize();
+                    break;
+                case 'thumbs_down':
+                    decreaseBrushSize();
+                    break;
+                case 'open_palm':
+                    clearBtn.click();
+                    break;
+            }
+        }
+
+        function cycleColor() {
+            const colors = document.querySelectorAll('.color-btn');
+            let currentIndex = Array.from(colors).findIndex(btn => btn.classList.contains('active'));
+            const nextIndex = (currentIndex + 1) % colors.length;
+            colors[nextIndex].click();
+        }
+
+        function increaseBrushSize() {
+            const newSize = Math.min(30, parseInt(brushSize.value) + 1);
+            brushSize.value = newSize;
+            sizeDisplay.textContent = newSize;
+        }
+
+        function decreaseBrushSize() {
+            const newSize = Math.max(1, parseInt(brushSize.value) - 1);
+            brushSize.value = newSize;
+            sizeDisplay.textContent = newSize;
+        }
+
+        function drawPoint(x, y) {
+            if (lastPos === null) {
+                lastPos = { x, y };
+                return;
+            }
+
+            saveState();
+
+            ctx.strokeStyle = currentColor;
+            ctx.lineWidth = brushSize.value;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(lastPos.x, lastPos.y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+
+            lastPos = { x, y };
+        }
+
+        function saveState() {
+            if (drawingHistory.length === 0 || Date.now() - drawingHistory[drawingHistory.length - 1].time > 100) {
+                drawingHistory.push({
+                    imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+                    time: Date.now()
+                });
+            }
+        }
+
+        function redrawCanvas() {
+            if (drawingHistory.length > 0) {
+                ctx.putImageData(drawingHistory[drawingHistory.length - 1].imageData, 0, 0);
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+    </script>
+</body>
+</html>
